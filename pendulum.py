@@ -28,6 +28,7 @@ class Pendulum(Thread):
 
         self.update_interval = update_interval
         self.event_start_t = 0
+        self.prog_start_t = time.time()
 
         # 0x87 = power on, no self test, enable all axis, 40hz data rate
         # 0xD7 = power on, no self test, enable all axis, 160Hz data rate
@@ -156,14 +157,12 @@ class Pendulum(Thread):
     @abc.abstractmethod
     def process_data(self, data):
         '''A deriving class must supply this method!'''
-        print "Whops. abstract method called."
         return
 
     def process(self):
         '''Main loop for the pendulum class'''
         self.start()
 
-        print "entering main loop"
         while True:
             self.event.wait()
             num_points = 0
@@ -186,7 +185,7 @@ class Pendulum(Thread):
                 if data['t'] - start_t >= self.update_interval:
                     break
 
-            e = dict(t = float(t_sum) / num_points, 
+            e = dict(t = (float(t_sum) / num_points) - self.prog_start_t, 
                      x = float(x_sum) / num_points,
                      y = float(y_sum) / num_points,
                      z = float(z_sum) / num_points)

@@ -14,5 +14,5 @@ p = TestPendulum(.1)
 try:
     p.process()
 except KeyboardInterrupt:
-    print "Caught exception"
     p.exit()
+    print
