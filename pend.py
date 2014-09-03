@@ -10,5 +10,9 @@ class TestPendulum(Pendulum):
     def process_data(self, data):
         print "%.03f: %.4f, %.4f, %.4f" % (data['t'], data['x'], data['y'], data['z'])
 
-p = Pendulum(.1)
-p.process()
+p = TestPendulum(.1)
+try:
+    p.process()
+except KeyboardInterrupt:
+    print "Caught exception"
+    p.exit()

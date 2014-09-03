@@ -3,6 +3,7 @@
 import smbus
 import time
 import json
+import abc
 from Queue import Queue
 from threading import Thread, Lock, Event
 from struct import unpack
@@ -13,10 +14,6 @@ from struct import unpack
 CALIBRATION_WINDOW = 10
 CALIBRATION_FILE = ".pendulum-calibration.json"
 
-# For 160Hz, period is 6.25ms. So, wait this long, then start polling 
-# to see if we have another data point
-DATA_READ_DELAY = .006 # s
-
 class Pendulum(Thread):
 
     address = 0x1d
@@ -24,9 +21,10 @@ class Pendulum(Thread):
         Thread.__init__(self)
         self.bus = smbus.SMBus(0)
 
-        self.data_queue = Queue()
+        self.queue = Queue()
         self.lock = Lock()
         self.event = Event()
+        self.exit_now = False
 
         self.update_interval = update_interval
         self.event_start_t = 0
@@ -158,6 +156,7 @@ class Pendulum(Thread):
     @abc.abstractmethod
     def process_data(self, data):
         '''A deriving class must supply this method!'''
+        print "Whops. abstract method called."
         return
 
     def process(self):
@@ -167,10 +166,9 @@ class Pendulum(Thread):
         print "entering main loop"
         while True:
             self.event.wait()
-            print "Wake for processing event"
             num_points = 0
             start_t = 0
-            x_sum = y_sum = z_sum = t_sum = 0
+            x_sum = y_sum = z_sum = t_sum = 0.0
             while True:
                 self.lock.acquire()
                 data = self.queue.get()
@@ -188,34 +186,34 @@ class Pendulum(Thread):
                 if data['t'] - start_t >= self.update_interval:
                     break
 
-            e = dict(t = t_sum / num_points, 
-                     x = x_sum / num_points,
-                     y = y_sum / num_points,
-                     z = z_sum / num_points)
+            e = dict(t = float(t_sum) / num_points, 
+                     x = float(x_sum) / num_points,
+                     y = float(y_sum) / num_points,
+                     z = float(z_sum) / num_points)
 
             self.process_data(e)
 
+    def exit(self):
+        self.exit_now = True
+
     def run(self):
-        print "start thread main"
-        while True:
+        # There used to be an overrun check, but it turns out that in anything
+        # but the steady state, we can't keep up with a 160Hz sample rate. 
+        # shouldn't be a problem.
+        while not self.exit_now:
             try:
                 status = self.bus.read_byte_data(self.address, 0x27)
             except IOError:
                 continue
-            # Check to see if any of the top 4 overrun bits are set.
-            if status & 0xF0:
-                print "Data overrun!!"
 
             # Is a new xyz data point is ready?
             if status & 0x08:
                 x, y, z = self._read_data_point()
                 t = time.time()
-                self.data_queue.put(dict(t = t, x = x, y = y, z = z))
+                self.queue.put(dict(t = t, x = x, y = y, z = z))
                 if self.event_start_t == 0:
                     self.event_start_t = t
 
                 if t - self.event_start_t >= self.update_interval:
                     self.event_start_t = 0
                     self.event.set()
-
-            sleep(DATA_READ_DELAY)
