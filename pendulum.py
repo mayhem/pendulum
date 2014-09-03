@@ -3,6 +3,8 @@
 import smbus
 import time
 import json
+from Queue import Queue
+from threading import Thread, Lock, Event
 from struct import unpack
 
 # Maximum readings
@@ -11,14 +13,27 @@ from struct import unpack
 CALIBRATION_WINDOW = 10
 CALIBRATION_FILE = ".pendulum-calibration.json"
 
-class Pendulum(object):
+# For 160Hz, period is 6.25ms. So, wait this long, then start polling 
+# to see if we have another data point
+DATA_READ_DELAY = .006 # s
+
+class Pendulum(Thread):
 
     address = 0x1d
-    def __init__(self):
+    def __init__(self, update_interval):
+        Thread.__init__(self)
         self.bus = smbus.SMBus(0)
 
+        self.data_queue = Queue()
+        self.lock = Lock()
+        self.event = Event()
+
+        self.update_interval = update_interval
+        self.event_start_t = 0
+
         # 0x87 = power on, no self test, enable all axis, 40hz data rate
-        self.bus.write_byte_data(self.address, 0x20, 0x87) 
+        # 0xD7 = power on, no self test, enable all axis, 160Hz data rate
+        self.bus.write_byte_data(self.address, 0x20, 0xD7) 
 
         x_off = self.bus.read_byte_data(self.address, 0x16)
         y_off = self.bus.read_byte_data(self.address, 0x17)
@@ -29,23 +44,8 @@ class Pendulum(object):
         self.z_off = unpack("<b", chr(z_off))[0]
 
         self.reset_calibration()
-        self.reset_min_max()
 
-    def reset_min_max(self):
-        self.x_min = 5000 
-        self.x_max = -5000 
-        self.y_min = 5000
-        self.y_max = -5000
-        self.z_min = 5000
-        self.z_max = -5000 
-
-    def get_min_values(self):
-        return (x_min, y_min, z_min)
-
-    def get_max_values(self):
-        return (x_max, y_max, z_max)
-
-    def get_values(self, track_min_max=False):
+    def _read_data_point(self):
         while True:
             try:
                 x_low = self.bus.read_byte_data(self.address, 0x28)
@@ -53,11 +53,6 @@ class Pendulum(object):
             except IOError:
                 continue
             x = unpack("<h", chr(x_low) + chr(x_hi))[0]
-
-            if x < self.x_min:
-                self.x_min = x
-            if x > self.x_max:
-                self.x_max = x
 
             break
 
@@ -69,11 +64,6 @@ class Pendulum(object):
                 continue
             y = unpack("<h", chr(y_low) + chr(y_hi))[0] 
 
-            if y < self.y_min:
-                self.y_min = y
-            if y > self.y_max:
-                self.y_max = y
-
             break
 
         while True:
@@ -84,15 +74,10 @@ class Pendulum(object):
                 continue
 
             z = unpack("<h", chr(z_low) + chr(z_hi))[0] 
-            if z < self.z_min:
-                self.z_min = z
-            if z > self.z_max:
-                self.z_max = z
 
             break
 
         return (x, y, z)
-#        return (x - self.x_off - self.x_calibration, y - self.y_off - self.y_calibration, z - self.z_off - self.z_calibration)
 
     def calculate_window(self, window_size):
         values = []
@@ -140,7 +125,6 @@ class Pendulum(object):
         return ""
 
     def save_calibration(self):
-
         self.reset_calibration()
         x_avg, y_avg, z_avg = calculate_window(CALIBRATION_WINDOW)
 
@@ -152,3 +136,86 @@ class Pendulum(object):
             return "Cannot write calibration file %s: ", (CALIBRATION_FILE, e)
 
         return ""
+
+    def get_data_point(self):
+        while True:
+            if self.queue.empty:
+                sleep(.0001)
+                continue
+
+            break
+
+        return self.queue.get()
+
+    def clear_current_reading(self):
+        '''Remove any samples currently being collected'''
+
+        self.lock.acquire()
+        while self.queue.get():  
+            pass
+        self.lock.release()
+
+    @abc.abstractmethod
+    def process_data(self, data):
+        '''A deriving class must supply this method!'''
+        return
+
+    def process(self):
+        '''Main loop for the pendulum class'''
+        self.start()
+
+        print "entering main loop"
+        while True:
+            self.event.wait()
+            print "Wake for processing event"
+            num_points = 0
+            start_t = 0
+            x_sum = y_sum = z_sum = t_sum = 0
+            while True:
+                self.lock.acquire()
+                data = self.queue.get()
+                self.lock.release()
+
+                if not start_t:
+                    start_t = data['t']
+
+                x_sum += data['x']
+                y_sum += data['y']
+                z_sum += data['z']
+                t_sum += data['t']
+                num_points += 1
+
+                if data['t'] - start_t >= self.update_interval:
+                    break
+
+            e = dict(t = t_sum / num_points, 
+                     x = x_sum / num_points,
+                     y = y_sum / num_points,
+                     z = z_sum / num_points)
+
+            self.process_data(e)
+
+    def run(self):
+        print "start thread main"
+        while True:
+            try:
+                status = self.bus.read_byte_data(self.address, 0x27)
+            except IOError:
+                continue
+            # Check to see if any of the top 4 overrun bits are set.
+            if status & 0xF0:
+                print "Data overrun!!"
+
+            # Is a new xyz data point is ready?
+            if status & 0x08:
+                x, y, z = self._read_data_point()
+                t = time.time()
+                self.data_queue.put(dict(t = t, x = x, y = y, z = z))
+                if self.event_start_t == 0:
+                    self.event_start_t = t
+
+                if t - self.event_start_t >= self.update_interval:
+                    self.event_start_t = 0
+                    self.event.set()
+
+            sleep(DATA_READ_DELAY)

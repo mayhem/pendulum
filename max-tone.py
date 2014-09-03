@@ -25,6 +25,7 @@ ret = p.load_calibration()
 if ret:
     print ret
 
+p.start()
 last_m = 0
 sign = 0
 while True:
