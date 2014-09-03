@@ -76,12 +76,12 @@ class Pendulum(Thread):
 
             break
 
-        return (x, y, z)
+        return (x - self.x_calibration, y - self.y_calibration, z - self.z_calibration)
 
     def calculate_window(self, window_size):
         values = []
         for i in xrange(window_size):
-            values.append((self.get_values()))
+            values.append((self._read_data_point()))
 
         x_avg = y_avg = z_avg = 0
 
@@ -119,13 +119,11 @@ class Pendulum(Thread):
         self.y_calibration = data['calibration'][1]
         self.z_calibration = data['calibration'][2]
 
-        print "loaded ", self.x_calibration, self.y_calibration, self.z_calibration
-
         return ""
 
     def save_calibration(self):
         self.reset_calibration()
-        x_avg, y_avg, z_avg = calculate_window(CALIBRATION_WINDOW)
+        x_avg, y_avg, z_avg = self.calculate_window(CALIBRATION_WINDOW)
 
         try:
             f = open(CALIBRATION_FILE, "w")
@@ -163,7 +161,7 @@ class Pendulum(Thread):
         '''Main loop for the pendulum class'''
         self.start()
 
-        while True:
+        while not self.exit_now:
             self.event.wait()
             num_points = 0
             start_t = 0
@@ -194,6 +192,7 @@ class Pendulum(Thread):
 
     def exit(self):
         self.exit_now = True
+        self.event.set()
 
     def run(self):
         # There used to be an overrun check, but it turns out that in anything
