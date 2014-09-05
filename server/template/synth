@@ -19,7 +19,8 @@
 // use gain node to scale to 200. 
 // use another osc to be the modulating oscilator 
 
-var max_volume = .15;
+var max_volume = 1.0;
+var osc_volume = .15;
 
 var ctx = new AudioContext();
 
@@ -30,19 +31,23 @@ var osc2 = ctx.createOscillator()
 osc2.frequency.value = 1000; 
 osc2.type = "sawtooth";
 
-var gain = ctx.createGain();
-gain.gain.value = max_volume;
+var master_gain = ctx.createGain();
+master_gain.gain.value = max_volume;
 
-osc.connect(gain);
-osc2.connect(gain);
+var osc_gain = ctx.createGain();
+osc_gain.gain.value = osc_volume;
+
+osc.connect(osc_gain);
+osc2.connect(osc_gain);
 
 var sound0, sound1;
 
-gain.connect(ctx.destination);
+osc_gain.connect(master_gain);
+master_gain.connect(ctx.destination);
 
 bufferLoader = new BufferLoader(
    ctx,
-   [ 'static/wav/beep.wav', 'static/wav/boop.wav', ],
+   [ 'static/wav/drum.wav', 'static/wav/boop.wav', ],
    finishedLoading
 );
 bufferLoader.load();
@@ -60,17 +65,17 @@ function playSound(ctx, buffer)
 {
   var source = ctx.createBufferSource(); 
   source.buffer = buffer;               
-  source.connect(ctx.destination);     
+  source.connect(master_gain);
   source.start(0);                    
 }
 
 function play()
 {
-    gain.gain.value = max_volume;
+    master_gain.gain.value = max_volume;
 }
 function pause()
 {
-    gain.gain.value = 0;
+    master_gain.gain.value = 0;
 }
 
 var last_z = 0, sign = 0;
@@ -87,15 +92,12 @@ function handler(t, x, y, z)
         last_z = z;
 
     if (z > last_z && sign <= 0)
-    {
         sign = 1;
-//        playSound(ctx, sound0);
-    }
     else
     if (z < last_z && sign >= 0)
     {
         sign = -1;
-        playSound(ctx, sound1);
+        playSound(ctx, sound0);
     }
 
     last_z = z;
