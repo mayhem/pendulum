@@ -86,8 +86,35 @@ Chart.defaults.global = {
     onAnimationComplete: function(){}
 };
 {% endraw %}
-var ctx = $("#chart").get(0).getContext("2d");
-var chart = new Chart(ctx).Line(data, options)
+
+var ctx, chart, socket;
+
+$(document).ready(function() 
+{
+    ctx = $("#chart").get(0).getContext("2d");
+    chart = new Chart(ctx).Line(data, options)
+
+    console.log("{{ host }}");
+    console.log({{ port }});
+    socket = new WebSocket('ws://{{ host }}:{{ port }}/pendulum');
+    socket.onmessage = function (e) { onreceive(e) };
+    socket.onopen = function (e) { onopen(e) };
+    socket.onclose = function (e) { onclose(e) };
+});
+
+function onopen(e)
+{
+    console.log("open")
+}
+function onclose(e)
+{
+    console.log("error opening socket: " + String(e.code) + " " + String(e.reason));
+}
+function onreceive(e)
+{
+    console.log(e.data);
+//    var data = e.data.split(",");
+}
 </script>
 </body>
 </html>
