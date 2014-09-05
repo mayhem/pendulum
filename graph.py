@@ -7,43 +7,13 @@ import struct
 from Queue import Queue
 from threading import Thread, Event
 from flask import Flask, render_template, request
-from flask_sockets import Sockets
+from flask.ext.socketio import SocketIO, emit
+from time import sleep
 from pendulum import Pendulum
 
 STATIC_PATH = "/static"
 STATIC_FOLDER = "static"
 TEMPLATE_FOLDER = "template"
-
-p = None
-
-app = Flask(__name__,
-            static_url_path = STATIC_PATH,
-            static_folder = STATIC_FOLDER,
-            template_folder = TEMPLATE_FOLDER)
-sockets = Sockets(app)
-
-class GraphPendulum(Pendulum):
-
-    def __init__(self, update_interval, num_points):
-        Pendulum.__init__(self, update_interval)
-        self.data = []
-        self.num_points = num_points
-        self.ws_queue = Queue()
-        self.ws_event = Event()
-
-    def process_data(self, data):
-        self.data = "%.4f,%.4f,%.4f,%.4f" % (data['t'], data['x'], data['y'], data['z'])
-        self.ws_event.set()
-
-class Background(Thread):
-    def __init__(self):
-        Thread.__init__(self)
-        self.pendulum = None
-
-    def run(self):
-        self.pendulum = GraphPendulum(.1, 20)
-        self.pendulum.load_calibration()
-        self.pendulum.process()
 
 def get_ip_address_from_interface(ifname):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -53,6 +23,16 @@ def get_ip_address_from_interface(ifname):
     except IOError:
         return "[none]"
 
+p = Pendulum(.1)
+p.load_calibration()
+p.start()
+
+app = Flask(__name__,
+            static_url_path = STATIC_PATH,
+            static_folder = STATIC_FOLDER,
+            template_folder = TEMPLATE_FOLDER)
+socketio = SocketIO(app)
+
 host = get_ip_address_from_interface("eth0")
 port = 8000
 
@@ -60,15 +40,19 @@ port = 8000
 def hello(): 
     return render_template("index", host=host, port=port)
 
-p = Background()
-@sockets.route('/pendulum') 
-def pendulum_socket(ws): 
-    print "Socket connected!"
-    while True: 
-        p.pendulum.ws_event.wait()    
-        ws.send(p.data)
+@socketio.on('connect', namespace='/pendulum')
+def test_connect():
+    print "Client connected"
+    while True:
+        p.get_event().wait()    
+        data = p.get_data()
+        if data:
+           s = "%.4f,%.4f,%.4f,%.4f" % (data['t'], data['x'], data['y'], data['z'])
+           emit('data', {'data': s }) 
 
-p.start()
+@socketio.on('disconnect', namespace='/pendulum')
+def test_disconnect():
+    print('Client disconnected')
 
 if __name__ == '__main__':
-    app.run(debug=True, host=host, port=port)
+    socketio.run(app, host=host, port=port)

@@ -3,7 +3,7 @@
 import smbus
 import time
 import json
-import abc
+from time import sleep
 from Queue import Queue
 from threading import Thread, Lock, Event
 from struct import unpack
@@ -30,6 +30,8 @@ class Pendulum(Thread):
         self.event_start_t = 0
         self.prog_start_t = time.time()
 
+        self.data = None
+
         # 0x87 = power on, no self test, enable all axis, 40hz data rate
         # 0xD7 = power on, no self test, enable all axis, 160Hz data rate
         self.bus.write_byte_data(self.address, 0x20, 0xD7) 
@@ -43,6 +45,12 @@ class Pendulum(Thread):
         self.z_off = unpack("<b", chr(z_off))[0]
 
         self.reset_calibration()
+
+    def get_event(self):
+        return self.event
+
+    def get_data(self):
+        return self.data
 
     def _read_data_point(self):
         while True:
@@ -152,47 +160,37 @@ class Pendulum(Thread):
             pass
         self.lock.release()
 
-    @abc.abstractmethod
-    def process_data(self, data):
-        '''A deriving class must supply this method!'''
-        return
-
-    def process(self):
-        '''Main loop for the pendulum class'''
-        self.start()
-
-        while not self.exit_now:
-            self.event.wait()
-            num_points = 0
-            start_t = 0
-            x_sum = y_sum = z_sum = t_sum = 0.0
-            while True:
-                self.lock.acquire()
-                data = self.queue.get()
-                self.lock.release()
-
-                if not start_t:
-                    start_t = data['t']
-
-                x_sum += data['x']
-                y_sum += data['y']
-                z_sum += data['z']
-                t_sum += data['t']
-                num_points += 1
-
-                if data['t'] - start_t >= self.update_interval:
-                    break
-
-            e = dict(t = (float(t_sum) / num_points) - self.prog_start_t, 
-                     x = float(x_sum) / num_points,
-                     y = float(y_sum) / num_points,
-                     z = float(z_sum) / num_points)
-
-            self.process_data(e)
-
     def exit(self):
         self.exit_now = True
         self.event.set()
+
+    def _average_points(self):
+        num_points = 0
+        start_t = 0
+        x_sum = y_sum = z_sum = t_sum = 0.0
+        while True:
+            self.lock.acquire()
+            data = self.queue.get()
+            self.lock.release()
+
+            if not start_t:
+                start_t = data['t']
+
+            x_sum += data['x']
+            y_sum += data['y']
+            z_sum += data['z']
+            t_sum += data['t']
+            num_points += 1
+
+            if data['t'] - start_t >= self.update_interval:
+                break
+
+        e = dict(t = (float(t_sum) / num_points) - self.prog_start_t, 
+                 x = float(x_sum) / num_points,
+                 y = float(y_sum) / num_points,
+                 z = float(z_sum) / num_points)
+
+        return e
 
     def run(self):
         # There used to be an overrun check, but it turns out that in anything
@@ -214,4 +212,5 @@ class Pendulum(Thread):
 
                 if t - self.event_start_t >= self.update_interval:
                     self.event_start_t = 0
+                    self.data = self._average_points()
                     self.event.set()

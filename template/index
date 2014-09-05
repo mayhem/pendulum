@@ -6,6 +6,7 @@
    <canvas id="chart" width="800" height="500"></canvas>
    <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js"></script>
    <script type="text/javascript" src="/static/js/Chart.min.js"></script>
+   <script type="text/javascript" src="/static/js/socket.io.min.js"></script>
 <script>
 var data = {
    labels: [ ],
@@ -94,27 +95,28 @@ $(document).ready(function()
     ctx = $("#chart").get(0).getContext("2d");
     chart = new Chart(ctx).Line(data, options)
 
-    console.log("{{ host }}");
-    console.log({{ port }});
-    socket = new WebSocket('ws://{{ host }}:{{ port }}/pendulum');
-    socket.onmessage = function (e) { onreceive(e) };
-    socket.onopen = function (e) { onopen(e) };
-    socket.onclose = function (e) { onclose(e) };
-});
+    namespace = '/pendulum'; // change to an empty string to use the global namespace
 
-function onopen(e)
-{
-    console.log("open")
-}
-function onclose(e)
-{
-    console.log("error opening socket: " + String(e.code) + " " + String(e.reason));
-}
-function onreceive(e)
-{
-    console.log(e.data);
-//    var data = e.data.split(",");
-}
+    // the socket.io documentation recommends sending an explicit package upon connection
+    // this is specially important when using the global namespace
+    var socket = io.connect('http://' + document.domain + ':' + location.port + namespace);
+    socket.on('connect', function() {
+        socket.emit('my event', {data: 'I\'m connected!'});
+    });
+
+    // event handler for server sent data
+    // the data is displayed in the "Received" section of the page
+    socket.on('data', function(msg) {
+        console.log("Got data: " + msg.data);
+    });
+
+    // handlers for the different forms in the page
+    // these send data to the server in a variety of ways
+    $('form#emit').submit(function(event) {
+        socket.emit('my event', {data: $('#emit_data').val()});
+        return false;
+    });
+});
 </script>
 </body>
 </html>
