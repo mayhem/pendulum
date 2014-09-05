@@ -15,12 +15,20 @@
    </body>
 <script>
 
-var last_z = -3000, last_x = 0, last_y = 0, sign = 0, last_m;
-var is_paused = 1;
-var idle_threshold = 5;
-var idle_loops = 5;
-var idle_count = 0;
+var STATE_IDLE  = 0;
+var STATE_BUILD = 1;
+var STATE_DROP  = 2;
+var STATE_FAST  = 3
+var state = STATE_IDLE;
+var drop_t = 0;
 
+var last_z = -3000, last_x = 0, last_y = 0, sign = 0, last_m;
+var idle_threshold = 25;
+var idle_loops = 2;
+var idle_count = 0;
+var state = STATE_IDLE;
+
+var drop_duration = 1;
 var drop_threshold = 250;
 var drop_loops = 5;
 var drop_count = 0;
@@ -30,7 +38,7 @@ var drop_count = 0;
 // use another osc to be the modulating oscilator 
 
 var max_volume = 1.0;
-var osc_volume = .00;
+var osc_volume = .0;
 
 var ctx = new AudioContext();
 
@@ -51,12 +59,13 @@ osc2.connect(osc_gain);
 
 var sound0, sound1;
 
+
 osc_gain.connect(master_gain);
 master_gain.connect(ctx.destination);
 
 bufferLoader = new BufferLoader(
     ctx,
-    [ 'static/wav/drum.wav', 'static/wav/boop.wav', ],
+    [ 'static/wav/drum.wav', 'static/wav/drop.wav', ],
     finishedLoading
 );
 bufferLoader.load();
@@ -101,34 +110,51 @@ function handler(t, x, y, z)
         Math.abs(last_y - y) < idle_threshold &&
         Math.abs(last_z - z) < idle_threshold)
     {
-        idle_count++;
-        if (idle_count > idle_loops && !is_paused)
+        if (state == STATE_FAST || state == STATE_BUILD)
         {
-            pause();
-            is_paused = true;
+            console.log("very slow!");
+            idle_count++;
+            if (idle_count > idle_loops)
+            {
+                console.log("idle");
+                state = STATE_IDLE;
+                pause();
+            }
         }
     }
     else
     {
-        if (is_paused)
-        {
-            play();
-            is_paused = false;
-        }
         idle_count = 0;
+        if (state == STATE_IDLE)
+        {
+            console.log("build");
+            state = STATE_BUILD;
+            play();
+        }
     }
 
     m = Math.sqrt((x * x) + (y * y) + (z * z));
-    console.log(last_m - m);
-    if (last_m - m > drop_threshold)
+    if (state == STATE_BUILD && last_m - m > drop_threshold)
     {
+        state = STATE_DROP;
+        drop_t = t;
+        console.log("Drop!");
         playSound(ctx, sound1);
+    }
+
+    if (state == STATE_DROP)
+        console.log("drop_t " + drop_t + " " + t);
+    if (state == STATE_DROP && t - drop_t > drop_duration)
+    {
+        console.log("fast");
+        state = STATE_FAST;
+        drop_t = 0;
     }
 
     f = 350+ (z * 5);
     osc.frequency.value = f;
 
-    f = 350 + (x * 10);
+    f = 440 + (x * 10);
     osc2.frequency.value = f;
 
     if (z > last_z && sign <= 0)
