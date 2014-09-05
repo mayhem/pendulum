@@ -4,12 +4,9 @@ import sys
 import socket
 import fcntl
 import struct
-from Queue import Queue
-from threading import Thread, Event
 from flask import Flask, render_template, request
 from flask.ext.socketio import SocketIO, emit
 from time import sleep
-from pendulum import Pendulum
 
 STATIC_PATH = "/static"
 STATIC_FOLDER = "static"
@@ -23,10 +20,6 @@ def get_ip_address_from_interface(ifname):
     except IOError:
         return "[none]"
 
-p = Pendulum(.1)
-p.load_calibration()
-p.start()
-
 app = Flask(__name__,
             static_url_path = STATIC_PATH,
             static_folder = STATIC_FOLDER,
@@ -36,19 +29,25 @@ socketio = SocketIO(app)
 host = get_ip_address_from_interface("eth0")
 port = 8000
 
+p_host = "localhost"
+p_port = 9000
+
 @app.route('/') 
-def hello(): 
+def index(): 
     return render_template("index", host=host, port=port)
 
 @socketio.on('connect', namespace='/pendulum')
 def test_connect():
     print "Client connected"
-    while True:
-        p.get_event().wait()    
-        data = p.get_data()
-        if data:
-           s = "%.4f,%.4f,%.4f,%.4f" % (data['t'], data['x'], data['y'], data['z'])
-           emit('data', {'data': s }) 
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect((p_host, p_port))
+        f = sock.makefile()
+        while True:
+            line = f.readline()
+            emit('data', {'data': line.strip() }) 
+    finally:
+        sock.close()
 
 @socketio.on('disconnect', namespace='/pendulum')
 def test_disconnect():
@@ -56,3 +55,4 @@ def test_disconnect():
 
 if __name__ == '__main__':
     socketio.run(app, host=host, port=port)
+
