@@ -15,6 +15,12 @@
    </body>
 <script>
 
+var last_z = -3000, last_x = 0, last_y = 0, sign = 0;
+var is_paused = 1;
+var idle_threshold = 5;
+var idle_loops = 5;
+var idle_count = 0;
+
 // Modulation notes: 
 // use gain node to scale to 200. 
 // use another osc to be the modulating oscilator 
@@ -32,7 +38,6 @@ osc2.frequency.value = 1000;
 osc2.type = "sawtooth";
 
 var master_gain = ctx.createGain();
-master_gain.gain.value = max_volume;
 
 var osc_gain = ctx.createGain();
 osc_gain.gain.value = osc_volume;
@@ -46,9 +51,9 @@ osc_gain.connect(master_gain);
 master_gain.connect(ctx.destination);
 
 bufferLoader = new BufferLoader(
-   ctx,
-   [ 'static/wav/drum.wav', 'static/wav/boop.wav', ],
-   finishedLoading
+    ctx,
+    [ 'static/wav/drum.wav', 'static/wav/boop.wav', ],
+    finishedLoading
 );
 bufferLoader.load();
 
@@ -57,16 +62,17 @@ function finishedLoading(bufferList)
     sound0 = bufferList[0];
     sound1 = bufferList[1];
 
+    master_gain.gain.value = 0;
     osc.start(0);
     osc2.start(0);
 }
 
 function playSound(ctx, buffer) 
 {
-  var source = ctx.createBufferSource(); 
-  source.buffer = buffer;               
-  source.connect(master_gain);
-  source.start(0);                    
+    var source = ctx.createBufferSource(); 
+    source.buffer = buffer;               
+    source.connect(master_gain);
+    source.start(0);                    
 }
 
 function play()
@@ -78,18 +84,41 @@ function pause()
     master_gain.gain.value = 0;
 }
 
-var last_z = 0, sign = 0;
-
 function handler(t, x, y, z)
 {
+    if (last_z == -3000)
+    {
+        last_x = x;
+        last_y = y;
+        last_z = z;
+    }
+
+    if (Math.abs(last_x - x) < idle_threshold &&
+        Math.abs(last_y - y) < idle_threshold &&
+        Math.abs(last_z - z) < idle_threshold)
+    {
+        idle_count++;
+        if (idle_count > idle_loops && !is_paused)
+        {
+            pause();
+            is_paused = true;
+        }
+    }
+    else
+    {
+        if (is_paused)
+        {
+            play();
+            is_paused = false;
+        }
+        idle_count = 0;
+    }
+
     f = 350+ (z * 5);
     osc.frequency.value = f;
 
     f = 350 + (x * 10);
     osc2.frequency.value = f;
-
-    if (last_z == 0)
-        last_z = z;
 
     if (z > last_z && sign <= 0)
         sign = 1;
@@ -100,6 +129,8 @@ function handler(t, x, y, z)
         playSound(ctx, sound0);
     }
 
+    last_x = x;
+    last_y = y;
     last_z = z;
 }
 
