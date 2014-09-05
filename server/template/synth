@@ -38,34 +38,36 @@ var drop_count = 0;
 // use another osc to be the modulating oscilator 
 
 var max_volume = 1.0;
-var osc_volume = .0;
+var osc_volume = .1;
 
 var ctx = new AudioContext();
 
 var osc = ctx.createOscillator()
-osc.type = "sine";
+osc.type = "square";
 
 var osc2 = ctx.createOscillator()
 osc2.frequency.value = 1000; 
 osc2.type = "sawtooth";
 
 var master_gain = ctx.createGain();
-
 var osc_gain = ctx.createGain();
-osc_gain.gain.value = osc_volume;
+osc_gain.gain.value = .0;
+
+var osc2_gain = ctx.createGain();
+osc2_gain.gain.value = .0;
 
 osc.connect(osc_gain);
-osc2.connect(osc_gain);
+osc2.connect(osc2_gain);
 
 var sound0, sound1;
 
-
 osc_gain.connect(master_gain);
+osc2_gain.connect(master_gain);
 master_gain.connect(ctx.destination);
 
 bufferLoader = new BufferLoader(
     ctx,
-    [ 'static/wav/drum.wav', 'static/wav/drop.wav', ],
+    [ 'static/wav/drum.wav', 'static/wav/drop.wav' ],
     finishedLoading
 );
 bufferLoader.load();
@@ -75,7 +77,7 @@ function finishedLoading(bufferList)
     sound0 = bufferList[0];
     sound1 = bufferList[1];
 
-    master_gain.gain.value = 0;
+    master_gain.gain.value = max_volume;
     osc.start(0);
     osc2.start(0);
 }
@@ -112,13 +114,13 @@ function handler(t, x, y, z)
     {
         if (state == STATE_FAST || state == STATE_BUILD)
         {
-            console.log("very slow!");
             idle_count++;
             if (idle_count > idle_loops)
             {
+                osc_gain.gain.value = 0;
+                osc2_gain.gain.value = 0;
                 console.log("idle");
                 state = STATE_IDLE;
-                pause();
             }
         }
     }
@@ -127,34 +129,32 @@ function handler(t, x, y, z)
         idle_count = 0;
         if (state == STATE_IDLE)
         {
-            console.log("build");
             state = STATE_BUILD;
-            play();
+            osc_gain.gain.value = osc_volume;
         }
     }
 
     m = Math.sqrt((x * x) + (y * y) + (z * z));
     if (state == STATE_BUILD && last_m - m > drop_threshold)
     {
+        osc_gain.gain.value = 0;
+        osc2_gain.gain.value = 0;
         state = STATE_DROP;
         drop_t = t;
-        console.log("Drop!");
         playSound(ctx, sound1);
     }
 
-    if (state == STATE_DROP)
-        console.log("drop_t " + drop_t + " " + t);
     if (state == STATE_DROP && t - drop_t > drop_duration)
     {
-        console.log("fast");
+        osc2_gain.gain.value = osc_volume;
         state = STATE_FAST;
         drop_t = 0;
     }
 
-    f = 350+ (z * 5);
+    f = 400+ (z * 5);
     osc.frequency.value = f;
 
-    f = 440 + (x * 10);
+    f = 250 + (x * 10);
     osc2.frequency.value = f;
 
     if (z > last_z && sign <= 0)
