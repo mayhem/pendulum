@@ -94,6 +94,7 @@ $(document).ready(function()
 {
     ctx = $("#chart").get(0).getContext("2d");
     chart = new Chart(ctx).Line(data, options)
+    num_points = 0;
 
     namespace = '/pendulum'; // change to an empty string to use the global namespace
 
@@ -108,6 +109,11 @@ $(document).ready(function()
     // the data is displayed in the "Received" section of the page
     socket.on('data', function(msg) {
         console.log("Got data: " + msg.data);
+        d = msg.data.split(",")
+        chart.addData([d[1], d[2], d[3]], String(d[0]));
+        num_points++;
+        if (num_points > 20)
+            chart.removeData();
     });
 
     // handlers for the different forms in the page

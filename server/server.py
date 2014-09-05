@@ -34,7 +34,7 @@ p_port = 9000
 
 @app.route('/') 
 def index(): 
-    return render_template("index", host=host, port=port)
+    return render_template("synth", host=host, port=port)
 
 @socketio.on('connect', namespace='/pendulum')
 def test_connect():

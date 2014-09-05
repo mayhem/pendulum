@@ -1,0 +1,72 @@
+<html>
+   <head>
+       <title>Pendulum graph</title>
+       <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js"></script>
+       <script type="text/javascript" src="/static/js/socket.io.min.js"></script>
+       <link rel="stylesheet" type="text/css" href="/static/css/bootstrap.css">
+   </head>
+   <body>
+
+       <a class="btn btn-large" onclick="play()">Play</a>
+       <a class="btn btn-large" onclick="pause()">Pause</a>
+
+
+   </body>
+<script>
+
+// Modulation notes: 
+// use gain node to scale to 200. 
+// use another osc to be the modulating oscilator 
+
+var max_volume = .15;
+
+var ctx = new AudioContext();
+
+var osc = ctx.createOscillator()
+osc.type = "sine";
+
+var osc2 = ctx.createOscillator()
+osc2.frequency.value = 1000; 
+osc2.type = "sine";
+
+var gain = ctx.createGain();
+gain.gain.value = max_volume;
+
+osc.connect(gain);
+osc2.connect(gain);
+
+gain.connect(ctx.destination);
+osc.start(0);
+osc2.start(0);
+//osc.frequency.value = 660;
+
+function play()
+{
+    gain.gain.value = max_volume;
+}
+function pause()
+{
+    gain.gain.value = 0;
+}
+
+function handler(t, x, y, z)
+{
+    f = 660+ (z * 5);
+    osc.frequency.value = f;
+
+    f = 660+ (z * 15);
+    osc2.frequency.value = f;
+}
+
+$(document).ready(function() 
+{
+    namespace = '/pendulum'; 
+    var socket = io.connect('http://' + document.domain + ':' + location.port + namespace);
+    socket.on('data', function(msg) {
+        d = msg.data.split(",");
+        handler(parseInt(d[0]), parseInt(d[1]), parseInt(d[2]), parseInt(d[3]));
+    });
+});
+</script>
+</body>
+</html>
