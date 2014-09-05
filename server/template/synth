@@ -15,18 +15,22 @@
    </body>
 <script>
 
-var last_z = -3000, last_x = 0, last_y = 0, sign = 0;
+var last_z = -3000, last_x = 0, last_y = 0, sign = 0, last_m;
 var is_paused = 1;
 var idle_threshold = 5;
 var idle_loops = 5;
 var idle_count = 0;
+
+var drop_threshold = 250;
+var drop_loops = 5;
+var drop_count = 0;
 
 // Modulation notes: 
 // use gain node to scale to 200. 
 // use another osc to be the modulating oscilator 
 
 var max_volume = 1.0;
-var osc_volume = .15;
+var osc_volume = .00;
 
 var ctx = new AudioContext();
 
@@ -114,6 +118,13 @@ function handler(t, x, y, z)
         idle_count = 0;
     }
 
+    m = Math.sqrt((x * x) + (y * y) + (z * z));
+    console.log(last_m - m);
+    if (last_m - m > drop_threshold)
+    {
+        playSound(ctx, sound1);
+    }
+
     f = 350+ (z * 5);
     osc.frequency.value = f;
 
@@ -121,17 +132,24 @@ function handler(t, x, y, z)
     osc2.frequency.value = f;
 
     if (z > last_z && sign <= 0)
+    {
         sign = 1;
+
+        // pendulum is over the center
+    }
     else
     if (z < last_z && sign >= 0)
     {
         sign = -1;
-        playSound(ctx, sound0);
+
+        // Pendulum is turning around!
+        //playSound(ctx, sound0);
     }
 
     last_x = x;
     last_y = y;
     last_z = z;
+    last_m = m;
 }
 
 $(document).ready(function() 
