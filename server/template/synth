@@ -76,7 +76,7 @@ fast_gain.gain.value = .0;
 
 bufferLoader = new BufferLoader(
     ctx,
-    [ 'static/wav/drop-bass-1.wav', 'static/wav/drop.wav', 'static/wav/drop-bass-2.wav' ],
+    [ 'static/wav/build.wav', 'static/wav/drop.wav', 'static/wav/drop-bass-2.wav' ],
     finishedLoading
 );
 bufferLoader.load();
@@ -171,8 +171,9 @@ function handler(t, x, y, z)
     {
         console.log("drop!");
         state = STATE_DROP;
-        play_sound(drop_buffer, drop_gain);
+
         drop_gain.gain.value = drop_volume;
+        play_sound(drop_buffer, drop_gain);
         build_gain.gain.value = 0;
         fast_gain.gain.value = 0;
         drop_t = t;
@@ -185,6 +186,8 @@ function handler(t, x, y, z)
         drop_gain.gain.value = 0;
         build_gain.gain.value = 0;
         fast_gain.gain.value = fast_volume;
+//        fast_gain.gain.setValueAtTime(0, ctx.currentTime);
+//        fast_gain.gain.setTargetAtTime(fast_volume, ctx.currentTime + 0.01, 0.2);
         drop_t = 0;
     }
 
