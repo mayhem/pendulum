@@ -6,12 +6,14 @@
        <script type="text/javascript" src="/static/js/buffer-loader.js"></script>
        <link rel="stylesheet" type="text/css" href="/static/css/bootstrap.css">
    </head>
-   <body>
-
-       <a class="btn btn-large" onclick="play()">Play</a>
-       <a class="btn btn-large" onclick="pause()">Pause</a>
-
-
+   <body style="background-color: #FFCC22">
+       <div style="margin-top: 3em; text-align: center;">
+           <h1>Dubstep Pendulum!</h1>
+           <div style="margin-top: 3em;">
+               <a class="btn btn-large" onclick="play()">Play</a>
+               <a class="btn btn-large" onclick="pause()">Pause</a>
+           </div>
+       </div>
    </body>
 <script>
 
@@ -42,9 +44,9 @@ var drop_count = 0;
 // use another osc to be the modulating oscilator 
 
 var max_volume = 1.0;
-var build_volume = .4;
-var drop_volume = .6;
-var fast_volume = .5;
+var build_volume = .8;
+var drop_volume = 1.0;
+var fast_volume = .9;
 
 var ctx = new AudioContext();
 
@@ -193,16 +195,16 @@ function handler(t, x, y, z)
 
     s = (1.0 - (z / 500)) * 5
     f = 500 + (Math.sin(s) * 500);
-    if (state == STATE_BUILD)
-        console.log("build s " + s + " sin " + Math.sin(s));
+//    if (state == STATE_BUILD)
+//        console.log("build s " + s + " sin " + Math.sin(s));
     build_lp.frequency.value = f;
 
     // z based modulation
     //s = (1.0 - (z / 100)) * 8
     s = (m / 800);
     f = (Math.sin(s) * 1200);
-    if (state == STATE_FAST)
-        console.log("fast s " + s + " f " + f);
+//    if (state == STATE_FAST)
+//        console.log("fast s " + s + " f " + f);
     fast_lp.frequency.value = f;
 
     last_x = x;
