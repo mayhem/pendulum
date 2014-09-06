@@ -42,7 +42,9 @@ var drop_count = 0;
 // use another osc to be the modulating oscilator 
 
 var max_volume = 1.0;
-var osc_volume = .2;
+var build_volume = .2;
+var drop_volume = .5;
+var fast_volume = .4;
 
 var ctx = new AudioContext();
 
@@ -52,12 +54,15 @@ var ctx = new AudioContext();
 //osc2.type = "square";
 
 build_lp = ctx.createBiquadFilter();
+build_lp.gain.value = 200;
 build_lp.type = "lowpass";
 
 drop_lp = ctx.createBiquadFilter();
 drop_lp.type = "lowpass";
+var drop_buffer = null;
 
 fast_lp = ctx.createBiquadFilter();
+fast_lp.gain.value = 200;
 fast_lp.type = "lowpass";
 
 var master_gain = ctx.createGain();
@@ -69,10 +74,9 @@ drop_gain.gain.value = .0;
 build_gain.gain.value = .0;
 fast_gain.gain.value = .0;
 
-
 bufferLoader = new BufferLoader(
     ctx,
-    [ 'static/wav/build.wav', 'static/wav/drop-bass-1.wav', 'static/wav/drop-bass-2.wav' ],
+    [ 'static/wav/drop-bass-1.wav', 'static/wav/drop.wav', 'static/wav/drop-bass-2.wav' ],
     finishedLoading
 );
 bufferLoader.load();
@@ -84,36 +88,33 @@ function finishedLoading(bufferList)
     var build = ctx.createBufferSource(); 
     build.buffer = bufferList[0];               
     build.loop = true;
-    build.connect(build_gain);
+    build.connect(build_lp);
     build.start(0);                    
 
-    var drop = ctx.createBufferSource(); 
-    drop.buffer = bufferList[1];               
-    drop.loop = true;
-    drop.connect(drop_gain);
-    drop_gain.gain.value = 0;
-    drop.start(0);                    
+    drop_buffer = bufferList[1];
 
     var fast = ctx.createBufferSource(); 
     fast.buffer = bufferList[2];               
     fast.loop = true;
-    fast.connect(fast_gain);
+    fast.connect(fast_lp);
     fast_gain.gain.value = 0;
     fast.start(0);                    
 
-    drop_gain.connect(master_gain);
+    build_lp.connect(build_gain);
+    fast_lp.connect(fast_gain);
+
     build_gain.connect(master_gain);
+    drop_gain.connect(master_gain);
     fast_gain.connect(master_gain);
 
     master_gain.connect(ctx.destination);
 }
 
-function play_sound(buffer, loop) 
+function play_sound(buffer, gain_node) 
 {
     var source = ctx.createBufferSource(); 
     source.buffer = buffer;               
-    source.loop = loop;
-    source.connect(master_gain);
+    source.connect(gain_node);
     source.start(0);                    
 }
 
@@ -157,8 +158,9 @@ function handler(t, x, y, z)
         idle_count = 0;
         if (state == STATE_IDLE)
         {
+            console.log("build");
             state = STATE_BUILD;
-            build_gain.gain.value = osc_volume;
+            build_gain.gain.value = build_volume;
             drop_gain.gain.value = 0;
             fast_gain.gain.value = 0;
         }
@@ -167,8 +169,10 @@ function handler(t, x, y, z)
     m = Math.sqrt((x * x) + (y * y) + (z * z));
     if (state == STATE_BUILD && last_m - m > drop_threshold)
     {
+        console.log("drop!");
         state = STATE_DROP;
-        drop_gain.gain.value = osc_volume;
+        play_sound(drop_buffer, drop_gain);
+        drop_gain.gain.value = drop_volume;
         build_gain.gain.value = 0;
         fast_gain.gain.value = 0;
         drop_t = t;
@@ -176,22 +180,23 @@ function handler(t, x, y, z)
 
     if (state == STATE_DROP && t - drop_t > drop_duration)
     {
+        console.log("fast!");
         state = STATE_FAST;
         drop_gain.gain.value = 0;
         build_gain.gain.value = 0;
-        fast_gain.gain.value = osc_volume;
+        fast_gain.gain.value = fast_volume;
         drop_t = 0;
     }
 
-//    f = 50+ (z * 5);
-//    osc.frequency.value = f;
+    f = 500 + (Math.sin(t * 20 ) * 500);
+    if (state == STATE_BUILD)
+        console.log("build f " + f);
+    build_lp.frequency.value = f;
 
-//    f = 50 + (z * 5);
-//    osc2.frequency.value = f;
-//    f = 750 + (10 * z);
-//    lowpass.frequency.value = f;
-//    console.log(f);
-    // 50 - 1500 range
+    f = 500 + (Math.sin(t * 60 ) * 500);
+    if (state == STATE_FAST)
+        console.log("fast t " + (t * 10) + " f " + f);
+    fast_lp.frequency.value = f;
 
     last_x = x;
     last_y = y;
@@ -205,7 +210,7 @@ $(document).ready(function()
     var socket = io.connect('http://' + document.domain + ':' + location.port + namespace);
     socket.on('data', function(msg) {
         d = msg.data.split(",");
-        handler(parseInt(d[0]), parseInt(d[1]), parseInt(d[2]), parseInt(d[3]));
+        handler(parseFloat(d[0]), parseFloat(d[1]), parseFloat(d[2]), parseFloat(d[3]));
     });
 });
 
