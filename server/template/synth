@@ -1,6 +1,6 @@
 <html>
    <head>
-       <title>Sound Pendulum</title>
+       <title>DubStep Pendulum</title>
        <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js"></script>
        <script type="text/javascript" src="/static/js/socket.io.min.js"></script>
        <script type="text/javascript" src="/static/js/buffer-loader.js"></script>
@@ -14,6 +14,10 @@
 
    </body>
 <script>
+
+// For build up, bring up filter freq from 0 - 1000hz
+// For drop oscillate, between 0 - 1000Hz
+// for fast, oscillate between
 
 var STATE_IDLE  = 0;
 var STATE_BUILD = 1;
@@ -38,54 +42,77 @@ var drop_count = 0;
 // use another osc to be the modulating oscilator 
 
 var max_volume = 1.0;
-var osc_volume = .1;
+var osc_volume = .2;
 
 var ctx = new AudioContext();
 
-var osc = ctx.createOscillator()
-osc.type = "square";
+//var osc = ctx.createOscillator()
+//osc.type = "square";
+//var osc2 = ctx.createOscillator()
+//osc2.type = "square";
 
-var osc2 = ctx.createOscillator()
-osc2.frequency.value = 1000; 
-osc2.type = "sawtooth";
+build_lp = ctx.createBiquadFilter();
+build_lp.type = "lowpass";
+
+drop_lp = ctx.createBiquadFilter();
+drop_lp.type = "lowpass";
+
+fast_lp = ctx.createBiquadFilter();
+fast_lp.type = "lowpass";
 
 var master_gain = ctx.createGain();
-var osc_gain = ctx.createGain();
-osc_gain.gain.value = .0;
+var build_gain = ctx.createGain();
+var drop_gain = ctx.createGain();
+var fast_gain = ctx.createGain();
 
-var osc2_gain = ctx.createGain();
-osc2_gain.gain.value = .0;
+drop_gain.gain.value = .0;
+build_gain.gain.value = .0;
+fast_gain.gain.value = .0;
 
-osc.connect(osc_gain);
-osc2.connect(osc2_gain);
-
-var sound0, sound1;
-
-osc_gain.connect(master_gain);
-osc2_gain.connect(master_gain);
-master_gain.connect(ctx.destination);
 
 bufferLoader = new BufferLoader(
     ctx,
-    [ 'static/wav/drum.wav', 'static/wav/drop.wav' ],
+    [ 'static/wav/build.wav', 'static/wav/drop-bass-1.wav', 'static/wav/drop-bass-2.wav' ],
     finishedLoading
 );
 bufferLoader.load();
 
 function finishedLoading(bufferList)
 {
-    sound0 = bufferList[0];
-    sound1 = bufferList[1];
-
     master_gain.gain.value = max_volume;
-    osc.start(0);
-    osc2.start(0);
+
+    var build = ctx.createBufferSource(); 
+    build.buffer = bufferList[0];               
+    build.loop = true;
+    build.connect(build_gain);
+    build.start(0);                    
+
+    var drop = ctx.createBufferSource(); 
+    drop.buffer = bufferList[1];               
+    drop.loop = true;
+    drop.connect(drop_gain);
+    drop_gain.gain.value = 0;
+    drop.start(0);                    
+
+    var fast = ctx.createBufferSource(); 
+    fast.buffer = bufferList[2];               
+    fast.loop = true;
+    fast.connect(fast_gain);
+    fast_gain.gain.value = 0;
+    fast.start(0);                    
+
+    drop_gain.connect(master_gain);
+    build_gain.connect(master_gain);
+    fast_gain.connect(master_gain);
+
+    master_gain.connect(ctx.destination);
 }
 
-function playSound(ctx, buffer) 
+function play_sound(buffer, loop) 
 {
     var source = ctx.createBufferSource(); 
     source.buffer = buffer;               
+    source.loop = loop;
     source.connect(master_gain);
     source.start(0);                    
 }
@@ -117,8 +144,9 @@ function handler(t, x, y, z)
             idle_count++;
             if (idle_count > idle_loops)
             {
-                osc_gain.gain.value = 0;
-                osc2_gain.gain.value = 0;
+                build_gain.gain.value = 0;
+                drop_gain.gain.value = 0;
+                fast_gain.gain.value = 0;
                 console.log("idle");
                 state = STATE_IDLE;
             }
@@ -130,47 +158,40 @@ function handler(t, x, y, z)
         if (state == STATE_IDLE)
         {
             state = STATE_BUILD;
-            osc_gain.gain.value = osc_volume;
+            build_gain.gain.value = osc_volume;
+            drop_gain.gain.value = 0;
+            fast_gain.gain.value = 0;
         }
     }
 
     m = Math.sqrt((x * x) + (y * y) + (z * z));
     if (state == STATE_BUILD && last_m - m > drop_threshold)
     {
-        osc_gain.gain.value = 0;
-        osc2_gain.gain.value = 0;
         state = STATE_DROP;
+        drop_gain.gain.value = osc_volume;
+        build_gain.gain.value = 0;
+        fast_gain.gain.value = 0;
         drop_t = t;
-        playSound(ctx, sound1);
     }
 
     if (state == STATE_DROP && t - drop_t > drop_duration)
     {
-        osc2_gain.gain.value = osc_volume;
         state = STATE_FAST;
+        drop_gain.gain.value = 0;
+        build_gain.gain.value = 0;
+        fast_gain.gain.value = osc_volume;
         drop_t = 0;
     }
 
-    f = 400+ (z * 5);
-    osc.frequency.value = f;
+//    f = 50+ (z * 5);
+//    osc.frequency.value = f;
 
-    f = 250 + (x * 10);
-    osc2.frequency.value = f;
-
-    if (z > last_z && sign <= 0)
-    {
-        sign = 1;
-
-        // pendulum is over the center
-    }
-    else
-    if (z < last_z && sign >= 0)
-    {
-        sign = -1;
-
-        // Pendulum is turning around!
-        //playSound(ctx, sound0);
-    }
+//    f = 50 + (z * 5);
+//    osc2.frequency.value = f;
+//    f = 750 + (10 * z);
+//    lowpass.frequency.value = f;
+//    console.log(f);
+    // 50 - 1500 range
 
     last_x = x;
     last_y = y;
