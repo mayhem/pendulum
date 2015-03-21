@@ -1,6 +1,6 @@
 <html>
    <head>
-       <title>DubStep Pendulum</title>
+       <title>Dubstep Pendulum</title>
        <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js"></script>
        <script type="text/javascript" src="/static/js/socket.io.min.js"></script>
        <script type="text/javascript" src="/static/js/buffer-loader.js"></script>
